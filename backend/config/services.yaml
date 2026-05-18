@@ -1,0 +1,20 @@
+parameters:
+
+services:
+    # Conventions par défaut : autowiring + autoconfiguration pour tous les services
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    # Enregistrement automatique de toutes les classes dans src/
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/DependencyInjection/'
+            - '../src/Entity/'
+            - '../src/Kernel.php'
+
+    # Les contrôleurs doivent être enregistrés comme services publics
+    App\Controller\:
+        resource: '../src/Controller/'
+        tags: ['controller.service_arguments']

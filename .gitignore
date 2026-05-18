@@ -1,0 +1,7 @@
+.env
+.env.local
+backend/vendor/
+backend/var/
+frontend/node_modules/
+frontend/dist/
+*.xlsm

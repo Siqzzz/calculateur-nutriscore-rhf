@@ -1,4 +1,5 @@
 import type {
+  CreateIngredientPayload,
   Ingredient,
   IngredientSearchResult,
   MethodeFriture,
@@ -22,12 +23,22 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json()
 }
 
-// Ingrédients
+// Ingrédients CIQUAL
 export const searchIngredients = (search: string, page = 1, limit = 20) =>
   request<IngredientSearchResult>(`/ingredients?search=${encodeURIComponent(search)}&page=${page}&limit=${limit}`)
 
 export const getIngredient = (id: number) =>
   request<Ingredient>(`/ingredients/${id}`)
+
+// Ingrédients personnalisés
+export const listCustomIngredients = () =>
+  request<IngredientSearchResult>('/ingredients?personnalise=1')
+
+export const createCustomIngredient = (payload: CreateIngredientPayload) =>
+  request<Ingredient>('/ingredients', { method: 'POST', body: JSON.stringify(payload) })
+
+export const deleteCustomIngredient = (id: number) =>
+  request<null>(`/ingredients/${id}`, { method: 'DELETE' })
 
 // Recettes
 export const listRecipes = () =>

@@ -7,48 +7,41 @@ use App\Entity\RecipeIngredient;
 
 class NutriScoreCalculator
 {
-    // Facteurs de rendement friture (basés sur la feuille "test" de l'Excel)
     private const RENDEMENT_FRITURE_1_PASSAGE    = 0.93;
     private const RENDEMENT_FRITURE_SURGELE      = 0.85;
     private const RENDEMENT_FRITURE_2_PASSAGES   = 0.80;
 
     /*
-     * Tables de points Nutri-Score — Tableau 1 (composante N, éléments défavorables)
-     * Seuil = valeur MAXIMALE pour obtenir le score de la ligne précédente.
-     * Ex : énergie ≤ 335 kJ → 0 pt ; > 335 kJ → 1 pt ; > 670 kJ → 2 pts ; … ; > 3350 → 10 pts
-     * La fonction pointsTable() retourne count($table) si la valeur dépasse tous les seuils → max = 10.
+     * Tables de points — composante N (éléments défavorables)
+     * Lecture : value ≤ seuil → points de la ligne ; value > tous les seuils → count($table) = 10.
      */
     private const POINTS_ENERGIE_KJ = [
         335  => 0, 670  => 1, 1005 => 2, 1340 => 3, 1675 => 4,
         2010 => 5, 2345 => 6, 2680 => 7, 3015 => 8, 3350 => 9,
     ];
     private const POINTS_SUCRES = [
-        4.5 => 0, 9  => 1, 13.5 => 2, 18 => 3, 22.5 => 4,
-        27  => 5, 31 => 6, 36   => 7, 40 => 8, 45   => 9,
+        4.5 => 0, 9   => 1, 13.5 => 2, 18 => 3, 22.5 => 4,
+        27  => 5, 31  => 6, 36   => 7, 40 => 8, 45   => 9,
     ];
     private const POINTS_AGS = [
         1  => 0, 2 => 1, 3 => 2, 4 => 3, 5  => 4,
         6  => 5, 7 => 6, 8 => 7, 9 => 8, 10 => 9,
     ];
-    // Sodium en mg/100g (= sel g/100g × 1000 / 2.5)
     private const POINTS_SODIUM = [
         90  => 0, 180 => 1, 270 => 2, 360 => 3, 450 => 4,
         540 => 5, 630 => 6, 720 => 7, 810 => 8, 900 => 9,
     ];
 
     /*
-     * Tables de points Nutri-Score — Tableau 2 (composante P, éléments favorables)
-     * Max = 5 pts pour protéines et fibres.
-     * FLN est non-linéaire : 0 → 1 → 2 → (pas de 3 ni 4) → 5 pts pour > 80 %.
-     * FLN est traité par la méthode dédiée pointsFln().
+     * Tables de points — composante P (éléments favorables)
+     * Fibres et protéines : max = 5 pts (fallback count($table) = 5).
+     * FLN : table non-linéaire, gérée par pointsFln().
      */
     private const POINTS_FIBRES = [
         0.9 => 0, 1.9 => 1, 2.8 => 2, 3.7 => 3, 4.7 => 4,
-        // > 4.7 → 5 pts via le fallback count($table)
     ];
     private const POINTS_PROTEINES = [
         1.6 => 0, 3.2 => 1, 4.8 => 2, 6.4 => 3, 8.0 => 4,
-        // > 8.0 → 5 pts via le fallback count($table)
     ];
 
     // Boissons : seuils énergie différents (kJ/100 mL)
@@ -89,7 +82,8 @@ class NutriScoreCalculator
     private function calculerTotauxRecette(array $ingredients): array
     {
         $totaux = [
-            'poidsFinalTotal'  => 0.0,   // poids cuit (part comestible × rendement cuisson)
+            'poidsFinalTotal'  => 0.0,
+            'poidsVNTotal'     => 0.0,
             'energieKj'        => 0.0,
             'energieKcal'      => 0.0,
             'proteines'        => 0.0,
@@ -107,58 +101,102 @@ class NutriScoreCalculator
             /** @var RecipeIngredient $ri */
             $ing = $ri->getIngredient();
 
-            $partComestible   = $ri->getEffectivePartComestible();
-            $rendementCuisson = $this->getRendementCuisson($ri);
+            ['vn' => $poidsVN, 'quantite' => $poidsQuantite] = $this->calculerPoids($ri);
 
-            // Poids comestible brut (avant cuisson) — base pour les valeurs nutritionnelles CIQUAL
-            $poidsComestible = $ri->getPoidsInitial() * $partComestible;
+            $ri->setPoidsFinalCalcule($poidsQuantite);
 
-            // Poids final cuit — base pour le poids total de la recette
-            $poidsFinal = $poidsComestible * $rendementCuisson;
+            // Le poids total de la recette est le poids physique final (après cuisson)
+            $totaux['poidsFinalTotal'] += $poidsQuantite;
 
-            $ri->setPoidsFinalCalcule($poidsFinal);
+            // Les valeurs nutritionnelles CIQUAL sont référencées au poids VN de chaque ingrédient
+            $f = $poidsVN / 100;
+            $totaux['energieKj']        += ($ing->getEnergieKj()        ?? 0) * $f;
+            $totaux['energieKcal']      += ($ing->getEnergieKcal()      ?? 0) * $f;
+            $totaux['proteines']        += ($ing->getProteines()        ?? 0) * $f;
+            $totaux['glucides']         += ($ing->getGlucides()         ?? 0) * $f;
+            $totaux['lipides']          += ($ing->getLipides()          ?? 0) * $f;
+            $totaux['sucres']           += ($ing->getSucres()           ?? 0) * $f;
+            $totaux['fibres']           += ($ing->getFibres()           ?? 0) * $f;
+            $totaux['acideGrasSatures'] += ($ing->getAcideGrasSatures() ?? 0) * $f;
+            $totaux['sodium']           += ($ing->getSodium()           ?? 0) * $f;
+            $totaux['sel']              += ($ing->getSel()              ?? 0) * $f;
 
-            // Le poids total de la recette utilise le poids APRÈS cuisson
-            $totaux['poidsFinalTotal'] += $poidsFinal;
-
-            // Les valeurs nutritionnelles CIQUAL sont exprimées pour 100 g de produit brut comestible.
-            // On pondère donc par le poids comestible brut (avant cuisson).
-            $facteurNutri = $poidsComestible / 100;
-            $totaux['energieKj']        += ($ing->getEnergieKj() ?? 0)        * $facteurNutri;
-            $totaux['energieKcal']      += ($ing->getEnergieKcal() ?? 0)      * $facteurNutri;
-            $totaux['proteines']        += ($ing->getProteines() ?? 0)        * $facteurNutri;
-            $totaux['glucides']         += ($ing->getGlucides() ?? 0)         * $facteurNutri;
-            $totaux['lipides']          += ($ing->getLipides() ?? 0)          * $facteurNutri;
-            $totaux['sucres']           += ($ing->getSucres() ?? 0)           * $facteurNutri;
-            $totaux['fibres']           += ($ing->getFibres() ?? 0)           * $facteurNutri;
-            $totaux['acideGrasSatures'] += ($ing->getAcideGrasSatures() ?? 0) * $facteurNutri;
-            $totaux['sodium']           += ($ing->getSodium() ?? 0)           * $facteurNutri;
-            $totaux['sel']              += ($ing->getSel() ?? 0)              * $facteurNutri;
-
-            // FLN : moyenne pondérée par le poids comestible brut
-            $totaux['fruitsLegumesPct'] += ($ing->getFruitsLegumesPct() ?? 0) * $poidsComestible;
+            // FLN : moyenne pondérée sur la même base que les valeurs nutritionnelles
+            $totaux['fruitsLegumesPct'] += ($ing->getFruitsLegumesPct() ?? 0) * $poidsVN;
+            $totaux['poidsVNTotal']     += $poidsVN;
         }
 
-        // Moyenne pondérée FLN (dénominateur = poids comestible total, recalculé ici)
-        $poidsComestibleTotal = array_sum(
-            array_map(
-                fn(RecipeIngredient $ri) => $ri->getPoidsInitial() * $ri->getEffectivePartComestible(),
-                $ingredients
-            )
-        );
-        if ($poidsComestibleTotal > 0) {
-            $totaux['fruitsLegumesPct'] /= $poidsComestibleTotal;
+        if ($totaux['poidsVNTotal'] > 0) {
+            $totaux['fruitsLegumesPct'] /= $totaux['poidsVNTotal'];
         }
 
         return $totaux;
     }
 
-    private function getRendementCuisson(RecipeIngredient $ri): float
+    /**
+     * Calcule les deux poids pour un ingrédient selon le diagramme de décision RHF.
+     *
+     * Variables :
+     *   - alimentCuit   : les valeurs CIQUAL sont-elles pour l'aliment cuit ?
+     *   - consommeTotalement : partComestible = 1 (pas de déchets)
+     *   - estCuit       : l'opérateur cuit-il l'ingrédient ?
+     *
+     * Tableau des 8 cas :
+     * ┌────────────┬──────────────┬──────┬──────────────────────────────────────┬───────────────────────────────┐
+     * │ alimentCuit│ consommeTotal│ cuit │ Poids quantité (poids final recette) │ Poids VN (valeurs nutritives) │
+     * ├────────────┼──────────────┼──────┼──────────────────────────────────────┼───────────────────────────────┤
+     * │ CRU        │ Oui          │ Oui  │ pInit × rendement                    │ pInit                         │
+     * │ CRU        │ Oui          │ Non  │ pInit                                │ pInit                         │
+     * │ CRU        │ Non          │ Oui  │ pInit × partCom × rendement          │ pInit × partCom               │
+     * │ CRU        │ Non          │ Non  │ pInit × partCom                      │ pInit × partCom               │
+     * │ CUIT       │ Oui          │ Oui  │ pInit                                │ pInit                         │
+     * │ CUIT       │ Oui          │ Non  │ pInit                                │ pInit                         │
+     * │ CUIT       │ Non          │ Oui  │ pInit × partCom × rendement          │ pInit × partCom × rendement   │
+     * │ CUIT       │ Non          │ Non  │ pInit × partCom                      │ pInit × partCom               │
+     * └────────────┴──────────────┴──────┴──────────────────────────────────────┴───────────────────────────────┘
+     *
+     * Logique clé :
+     * - CRU : le rendement cuisson modifie le poids physique final MAIS PAS le poids VN
+     *   (les nutriments restent constants, seul le poids de la recette diminue).
+     * - CUIT + totalité=Oui : le rendement est ignoré (réchauffage sans changement de masse).
+     * - CUIT + totalité=Non : le rendement s'applique aux DEUX poids.
+     *
+     * @return array{vn: float, quantite: float}
+     */
+    private function calculerPoids(RecipeIngredient $ri): array
     {
-        if (!$ri->isEstCuit()) {
-            return 1.0;
+        $ing             = $ri->getIngredient();
+        $pInit           = $ri->getPoidsInitial();
+        $partCom         = $ri->getEffectivePartComestible();
+        $consommeTotal   = ($partCom >= 1.0);
+        $alimentCuit     = $ing->isAlimentCuit();
+        $rendement       = $ri->isEstCuit() ? $this->getRendementCuisson($ri) : 1.0;
+
+        if (!$alimentCuit) {
+            // === ALIMENT CRU ===
+            // VN = poids comestible brut (avant cuisson)
+            $poidsVN       = $pInit * $partCom;
+            // Quantité = poids comestible brut × rendement (si cuit, sinon = VN)
+            $poidsQuantite = $poidsVN * $rendement;
+        } else {
+            // === ALIMENT CUIT ===
+            if ($consommeTotal) {
+                // Totalité=Oui : le rendement opérateur est ignoré pour les deux poids
+                $poidsVN       = $pInit;
+                $poidsQuantite = $pInit;
+            } else {
+                // Totalité=Non : part comestible + rendement s'appliquent aux deux poids
+                $poidsComestible = $pInit * $partCom;
+                $poidsVN         = $poidsComestible * $rendement;
+                $poidsQuantite   = $poidsComestible * $rendement;
+            }
         }
 
+        return ['vn' => $poidsVN, 'quantite' => $poidsQuantite];
+    }
+
+    private function getRendementCuisson(RecipeIngredient $ri): float
+    {
         return match ($ri->getMethodeFriture()) {
             RecipeIngredient::FRITURE_1_PASSAGE       => self::RENDEMENT_FRITURE_1_PASSAGE,
             RecipeIngredient::FRITURE_SURGELE         => self::RENDEMENT_FRITURE_SURGELE,
@@ -196,7 +234,7 @@ class NutriScoreCalculator
         $ptsFibres    = $this->pointsTable($n['fibres'],    self::POINTS_FIBRES);
         $ptsProteines = $this->pointsTable($n['proteines'], self::POINTS_PROTEINES);
 
-        // Règle : si pts_N ≥ 11 ET pts_FLN < 5, les protéines ne sont pas soustraites
+        // Si pts_N ≥ 11 ET pts_FLN < 5, les protéines ne sont pas soustraites
         $ptsP = $ptsFln + $ptsFibres;
         if ($ptsN < 11 || $ptsFln >= 5) {
             $ptsP += $ptsProteines;
@@ -243,10 +281,8 @@ class NutriScoreCalculator
     }
 
     /**
-     * Lookup générique dans une table de seuils.
-     * Chaque entrée [seuil => pts] signifie : value ≤ seuil → pts.
-     * Si la valeur dépasse tous les seuils, retourne count($table) (= max + 1).
-     * Cela donne 10 pour les tables N à 10 entrées, et 5 pour les tables P à 5 entrées.
+     * Lookup dans une table de seuils [seuil => pts].
+     * value ≤ seuil → pts ; value > tous les seuils → count($table) (max : 10 pour N, 5 pour P).
      */
     private function pointsTable(float $value, array $table): int
     {
@@ -259,21 +295,14 @@ class NutriScoreCalculator
     }
 
     /**
-     * Points FLN (Fruits, Légumes, Légumineuses, fruits à coques, huiles végétales).
-     * Table non-linéaire : les niveaux 3 et 4 n'existent pas.
-     * ≤ 40 % → 0 pt | > 40 % → 1 pt | > 60 % → 2 pts | > 80 % → 5 pts
+     * Points FLN — table non-linéaire (pas de niveaux 3 ni 4).
+     * ≤ 40 % → 0 | > 40 % → 1 | > 60 % → 2 | > 80 % → 5
      */
     private function pointsFln(float $value): int
     {
-        if ($value > 80) {
-            return 5;
-        }
-        if ($value > 60) {
-            return 2;
-        }
-        if ($value > 40) {
-            return 1;
-        }
+        if ($value > 80) return 5;
+        if ($value > 60) return 2;
+        if ($value > 40) return 1;
         return 0;
     }
 }

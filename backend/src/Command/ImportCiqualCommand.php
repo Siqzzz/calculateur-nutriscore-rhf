@@ -195,6 +195,8 @@ class ImportCiqualCommand extends Command
             $ing->setPartComestible($this->col($data, $colMap, 'part_comestible'));
             $ing->setRendementCuisson($this->col($data, $colMap, 'rendement'));
 
+            $ing->setAlimentCuit($this->detecterAlimentCuit($nom));
+
             if (isset($colMap['pct_viande_rouge'])) {
                 $pct = $this->toFloat($data[$colMap['pct_viande_rouge']] ?? null);
                 if ($pct !== null && $pct > 0) {
@@ -283,6 +285,26 @@ class ImportCiqualCommand extends Command
             }
         }
         return $map;
+    }
+
+    private function detecterAlimentCuit(string $nom): bool
+    {
+        $n = mb_strtolower($nom, 'UTF-8');
+        $motsCles = [
+            'cuit', 'cuite', 'cuits', 'cuites',
+            'rôti', 'rôtie', 'grillé', 'grillée',
+            'poché', 'pochée', 'poêlé', 'poêlée',
+            'frit', 'frite', 'bouilli', 'bouillie',
+            'braisé', 'braisée', 'sauté', 'sautée',
+            'fumé', 'fumée', 'à l\'eau', 'au four', 'à la vapeur',
+            'en conserve', 'appertisé', 'stérilisé',
+        ];
+        foreach ($motsCles as $mot) {
+            if (str_contains($n, $mot)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Accès sécurisé à une colonne optionnelle du colMap */

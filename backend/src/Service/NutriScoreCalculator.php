@@ -149,7 +149,7 @@ class NutriScoreCalculator
      * │ CRU        │ Oui          │ Non  │ pInit                                │ pInit                         │
      * │ CRU        │ Non          │ Oui  │ pInit × partCom × rendement          │ pInit × partCom               │
      * │ CRU        │ Non          │ Non  │ pInit × partCom                      │ pInit × partCom               │
-     * │ CUIT       │ Oui          │ Oui  │ pInit                                │ pInit                         │
+     * │ CUIT       │ Oui          │ Oui  │ pInit × rendement                    │ pInit × rendement             │
      * │ CUIT       │ Oui          │ Non  │ pInit                                │ pInit                         │
      * │ CUIT       │ Non          │ Oui  │ pInit × partCom × rendement          │ pInit × partCom × rendement   │
      * │ CUIT       │ Non          │ Non  │ pInit × partCom                      │ pInit × partCom               │
@@ -174,18 +174,20 @@ class NutriScoreCalculator
 
         if (!$alimentCuit) {
             // === ALIMENT CRU ===
-            // VN = poids comestible brut (avant cuisson)
+            // VN = poids comestible brut (avant cuisson) — les nutriments ne changent pas à la cuisson
             $poidsVN       = $pInit * $partCom;
             // Quantité = poids comestible brut × rendement (si cuit, sinon = VN)
             $poidsQuantite = $poidsVN * $rendement;
         } else {
             // === ALIMENT CUIT ===
+            // Les valeurs CIQUAL sont déjà pour l'aliment cuit.
+            // Le rendement opérateur s'applique aux deux poids (qu'il y ait part comestible ou non).
             if ($consommeTotal) {
-                // Totalité=Oui : le rendement opérateur est ignoré pour les deux poids
-                $poidsVN       = $pInit;
-                $poidsQuantite = $pInit;
+                // Totalité=Oui : pas de part comestible, rendement sur les deux poids
+                $poidsVN       = $pInit * $rendement;
+                $poidsQuantite = $pInit * $rendement;
             } else {
-                // Totalité=Non : part comestible + rendement s'appliquent aux deux poids
+                // Totalité=Non : part comestible puis rendement sur les deux poids
                 $poidsComestible = $pInit * $partCom;
                 $poidsVN         = $poidsComestible * $rendement;
                 $poidsQuantite   = $poidsComestible * $rendement;

@@ -69,6 +69,10 @@ class Ingredient
     #[ORM\Column(nullable: true)]
     private ?float $rendementCuisson = null;
 
+    // Indique si les valeurs CIQUAL sont exprimées pour l'aliment cuit (true) ou cru (false)
+    #[ORM\Column]
+    private bool $alimentCuit = false;
+
     // Spécificités viande rouge
     #[ORM\Column]
     private bool $estViandeRouge = false;
@@ -133,6 +137,9 @@ class Ingredient
     public function getRendementCuisson(): ?float { return $this->rendementCuisson; }
     public function setRendementCuisson(?float $v): static { $this->rendementCuisson = $v; return $this; }
 
+    public function isAlimentCuit(): bool { return $this->alimentCuit; }
+    public function setAlimentCuit(bool $v): static { $this->alimentCuit = $v; return $this; }
+
     public function isEstViandeRouge(): bool { return $this->estViandeRouge; }
     public function setEstViandeRouge(bool $v): static { $this->estViandeRouge = $v; return $this; }
 
@@ -163,6 +170,7 @@ class Ingredient
             'fruitsLegumesPct' => $this->fruitsLegumesPct,
             'partComestible' => $this->partComestible,
             'rendementCuisson' => $this->rendementCuisson,
+            'alimentCuit' => $this->alimentCuit,
             'estViandeRouge' => $this->estViandeRouge,
             'pctViandeRouge' => $this->pctViandeRouge,
             'presenceEdulorant' => $this->presenceEdulorant,

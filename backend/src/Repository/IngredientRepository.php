@@ -37,4 +37,13 @@ class IngredientRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    public function findAllPersonnalises(): array
+    {
+        return $this->createQueryBuilder('i')
+            ->where('i.isPersonnalise = true')
+            ->orderBy('i.nom', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
 }

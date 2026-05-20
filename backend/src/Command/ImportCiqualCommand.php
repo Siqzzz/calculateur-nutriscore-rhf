@@ -48,7 +48,11 @@ class ImportCiqualCommand extends Command
 
         $io->info("Chargement du fichier Excel (peut prendre quelques minutes)...");
 
-        $spreadsheet = IOFactory::load($fichier);
+        $sheetsToLoad = ['Part comestible-Rendement', 'Feuille calcul CIQ+BDD', 'Base de données'];
+        $reader = IOFactory::createReaderForFile($fichier);
+        $reader->setLoadSheetsOnly($sheetsToLoad);
+        $reader->setReadDataOnly(true);
+        $spreadsheet = $reader->load($fichier);
 
         $io->section('Import des rendements de cuisson (Part comestible-Rendement)');
         $this->importEdiblePortions($spreadsheet, $io);

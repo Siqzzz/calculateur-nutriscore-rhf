@@ -6,7 +6,9 @@ interface Props {
   nutrition: Nutrition100g | null
 }
 
-const GRADE_COLORS: Record<NutriGrade, { bg: string; text: string }> = {
+const GRADES: NutriGrade[] = ['A', 'B', 'C', 'D', 'E']
+
+const GRADE_STYLE: Record<NutriGrade, { bg: string; text: string }> = {
   A: { bg: '#038141', text: 'white' },
   B: { bg: '#85BB2F', text: 'white' },
   C: { bg: '#FECB02', text: '#333' },
@@ -14,42 +16,37 @@ const GRADE_COLORS: Record<NutriGrade, { bg: string; text: string }> = {
   E: { bg: '#E63312', text: 'white' },
 }
 
+function fmt(v: number | null | undefined, unit: string): string {
+  if (v == null) return '—'
+  return `${v.toFixed(2)} ${unit}`
+}
+
 export function NutriScoreDisplay({ grade, score, nutrition }: Props) {
   if (!grade) {
     return (
-      <div style={emptyStyle}>
-        Ajoutez des ingrédients et cliquez sur « Calculer le Nutri-Score »
+      <div className="flex flex-col items-center justify-center py-10 text-slate-400 text-center gap-3">
+        <svg className="w-12 h-12 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7H6a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-3M16 3h5m0 0v5m0-5l-8 8" />
+        </svg>
+        <p className="text-sm">Ajoutez des ingrédients et cliquez sur « Calculer le Nutri-Score »</p>
       </div>
     )
   }
 
-  const colors = GRADE_COLORS[grade]
-
   return (
-    <div style={containerStyle}>
-      <div style={badgeRowStyle}>
-        {(['A', 'B', 'C', 'D', 'E'] as NutriGrade[]).map(g => {
-          const c = GRADE_COLORS[g]
+    <div>
+      {/* Badges A-E */}
+      <div className="flex items-end justify-center gap-2 mb-4">
+        {GRADES.map(g => {
           const isActive = g === grade
+          const s = GRADE_STYLE[g]
           return (
             <div
               key={g}
-              style={{
-                background: c.bg,
-                color: c.text,
-                width: isActive ? 56 : 40,
-                height: isActive ? 56 : 40,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 700,
-                fontSize: isActive ? '1.5rem' : '1rem',
-                border: isActive ? `3px solid ${colors.bg}` : 'none',
-                boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.25)' : 'none',
-                transition: 'all 0.2s',
-                opacity: isActive ? 1 : 0.4,
-              }}
+              style={{ background: s.bg, color: s.text, opacity: isActive ? 1 : 0.35 }}
+              className={`rounded-full flex items-center justify-center font-bold transition-all ${
+                isActive ? 'w-14 h-14 text-2xl shadow-lg' : 'w-9 h-9 text-base'
+              }`}
             >
               {g}
             </div>
@@ -57,21 +54,18 @@ export function NutriScoreDisplay({ grade, score, nutrition }: Props) {
         })}
       </div>
 
-      <p style={{ color: '#555', fontSize: '0.85rem', marginTop: 6 }}>
-        Score : <strong>{score}</strong>
+      <p className="text-center text-sm text-slate-500 mb-5">
+        Score Nutri-Score : <span className="font-bold text-slate-800">{score}</span>
       </p>
 
       {nutrition && (
-        <table style={tableStyle}>
-          <thead>
-            <tr>
-              <th style={thStyle}>Nutriment</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>Pour 100g</th>
-            </tr>
-          </thead>
-          <tbody>
+        <div className="border-t border-slate-100 pt-4">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Pour 100g de plat fini</p>
+          <div className="space-y-1.5 text-sm">
             {[
-              ['Énergie', `${nutrition.energieKj ?? '-'} kJ / ${nutrition.energieKcal ?? '-'} kcal`],
+              ['Énergie', nutrition.energieKcal != null || nutrition.energieKj != null
+                ? `${nutrition.energieKcal?.toFixed(0) ?? '—'} kcal / ${nutrition.energieKj?.toFixed(0) ?? '—'} kJ`
+                : '—'],
               ['Lipides', fmt(nutrition.lipides, 'g')],
               ['dont Acides gras saturés', fmt(nutrition.acideGrasSatures, 'g')],
               ['Glucides', fmt(nutrition.glucides, 'g')],
@@ -80,63 +74,14 @@ export function NutriScoreDisplay({ grade, score, nutrition }: Props) {
               ['Protéines', fmt(nutrition.proteines, 'g')],
               ['Sel', fmt(nutrition.sel, 'g')],
             ].map(([label, value]) => (
-              <tr key={label as string}>
-                <td style={tdStyle}>{label}</td>
-                <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{value}</td>
-              </tr>
+              <div key={label} className="flex justify-between border-b border-slate-50 pb-1.5">
+                <span className="text-slate-600">{label}</span>
+                <span className="font-mono text-slate-800 text-xs">{value}</span>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        </div>
       )}
     </div>
   )
-}
-
-function fmt(v: number | null | undefined, unit: string): string {
-  if (v === null || v === undefined) return '-'
-  return `${v.toFixed(2)} ${unit}`
-}
-
-const containerStyle: React.CSSProperties = {
-  background: '#fafafa',
-  border: '1px solid #e0e0e0',
-  borderRadius: 10,
-  padding: '20px 24px',
-}
-
-const emptyStyle: React.CSSProperties = {
-  background: '#f5f5f5',
-  borderRadius: 10,
-  padding: '24px',
-  textAlign: 'center',
-  color: '#888',
-  fontSize: '0.9rem',
-}
-
-const badgeRowStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  justifyContent: 'center',
-  marginBottom: 12,
-}
-
-const tableStyle: React.CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  marginTop: 16,
-  fontSize: '0.875rem',
-}
-
-const thStyle: React.CSSProperties = {
-  padding: '6px 8px',
-  borderBottom: '2px solid #ddd',
-  textAlign: 'left',
-  fontWeight: 600,
-  color: '#333',
-}
-
-const tdStyle: React.CSSProperties = {
-  padding: '5px 8px',
-  borderBottom: '1px solid #eee',
 }

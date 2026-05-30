@@ -7,9 +7,15 @@ use App\Entity\RecipeIngredient;
 
 class NutriScoreCalculator
 {
-    private const RENDEMENT_FRITURE_1_PASSAGE    = 0.93;
-    private const RENDEMENT_FRITURE_SURGELE      = 0.85;
-    private const RENDEMENT_FRITURE_2_PASSAGES   = 0.80;
+    /*
+     * Facteurs multiplicatifs friture (appliqués au rendement CIQUAL de l'ingrédient).
+     * Source : feuille "test", lignes 26-47, colonnes B et C.
+     *   Col B : IF(H="1 passage",       VLOOKUP(rendement_ciqual) * 0.9,  0)
+     *   Col C : IF(H="Frites surgelées OU 2 passages et plus", VLOOKUP(...) * 0.85, 0)
+     * "Surgelé" et "2 passages+" sont la même catégorie dans l'Excel (facteur identique 0.85).
+     */
+    private const FACTEUR_FRITURE_1_PASSAGE         = 0.9;
+    private const FACTEUR_FRITURE_SURGELE_2PASSAGES  = 0.85;
 
     /*
      * Tables de points — composante N (éléments défavorables)
@@ -199,11 +205,22 @@ class NutriScoreCalculator
 
     private function getRendementCuisson(RecipeIngredient $ri): float
     {
+        // Rendement de base issu de la base CIQUAL (colonne 85 dans l'Excel)
+        $rendementCiqual = $ri->getIngredient()->getRendementCuisson() ?? 1.0;
+
         return match ($ri->getMethodeFriture()) {
-            RecipeIngredient::FRITURE_1_PASSAGE       => self::RENDEMENT_FRITURE_1_PASSAGE,
-            RecipeIngredient::FRITURE_SURGELE         => self::RENDEMENT_FRITURE_SURGELE,
-            RecipeIngredient::FRITURE_2_PASSAGES_PLUS => self::RENDEMENT_FRITURE_2_PASSAGES,
-            default => $ri->getIngredient()->getRendementCuisson() ?? 1.0,
+            // Friture 1 passage : rendement CIQUAL × 0.9
+            RecipeIngredient::FRITURE_1_PASSAGE =>
+                $rendementCiqual * self::FACTEUR_FRITURE_1_PASSAGE,
+
+            // Surgelé OU 2 passages+ : même catégorie Excel, rendement CIQUAL × 0.85
+            RecipeIngredient::FRITURE_SURGELE,
+            RecipeIngredient::FRITURE_2_PASSAGES_PLUS =>
+                $rendementCiqual * self::FACTEUR_FRITURE_SURGELE_2PASSAGES,
+
+            // Cuit non frit : rendement CIQUAL sans modification
+            // Non cuit : géré en amont (rendement = 1.0 si !estCuit), donc inaccessible ici
+            default => $rendementCiqual,
         };
     }
 

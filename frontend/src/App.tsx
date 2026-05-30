@@ -1,21 +1,48 @@
 import { useState } from 'react'
 import { RecipeForm } from './pages/RecipeForm'
-import type { RecipeType } from './types'
+import { RecipeList } from './pages/RecipeList'
+import { CiqualBrowser } from './pages/CiqualBrowser'
+import type { Recipe, RecipeType } from './types'
 
-const TABS: { key: RecipeType; label: string }[] = [
-  { key: 'general', label: '🍽 Général' },
-  { key: 'viande', label: '🥩 Viande' },
+type TabKey = RecipeType | 'recettes' | 'ciqual'
+
+const RECIPE_TABS: { key: RecipeType; label: string }[] = [
+  { key: 'general',  label: '🍽 Général' },
+  { key: 'viande',   label: '🥩 Viande' },
   { key: 'boissons', label: '🥤 Boissons' },
 ]
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<RecipeType>('general')
+  const [activeTab, setActiveTab] = useState<TabKey>('recettes')
+  // Recette en cours d'édition (depuis la liste)
+  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
+
+  const handleEditRecipe = (recipe: Recipe) => {
+    setEditingRecipe(recipe)
+    setActiveTab(recipe.type)
+  }
+
+  const handleTabChange = (tab: TabKey) => {
+    // Si on quitte l'onglet d'une recette en cours d'édition, on efface
+    if (editingRecipe && tab !== editingRecipe.type) {
+      setEditingRecipe(null)
+    }
+    setActiveTab(tab)
+  }
+
+  const handleBackToList = () => {
+    setEditingRecipe(null)
+    setActiveTab('recettes')
+  }
+
+  // Clé unique pour forcer le remontage de RecipeForm quand la recette change
+  const recipeFormKey = `${activeTab}-${editingRecipe?.id ?? 'new'}`
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
       <header style={headerStyle}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 16px', display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 16px', display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={logoStyle}>NS</div>
           <div>
             <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>
@@ -28,13 +55,14 @@ export default function App() {
         </div>
       </header>
 
-      {/* Navigation par onglets */}
+      {/* Navigation */}
       <nav style={navStyle}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 16px', display: 'flex', gap: 4 }}>
-          {TABS.map(tab => (
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 16px', display: 'flex', gap: 4 }}>
+          {/* Onglets recettes */}
+          {RECIPE_TABS.map(tab => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => handleTabChange(tab.key)}
               style={{
                 ...tabStyle,
                 background: activeTab === tab.key ? 'white' : 'transparent',
@@ -46,12 +74,56 @@ export default function App() {
               {tab.label}
             </button>
           ))}
+
+          {/* Séparateur */}
+          <div style={{ width: 1, background: '#e0e0e0', margin: '8px 4px' }} />
+
+          {/* Mes recettes */}
+          <button
+            onClick={() => handleTabChange('recettes')}
+            style={{
+              ...tabStyle,
+              background: activeTab === 'recettes' ? 'white' : 'transparent',
+              borderBottom: activeTab === 'recettes' ? '3px solid #7c3aed' : '3px solid transparent',
+              color: activeTab === 'recettes' ? '#7c3aed' : '#555',
+              fontWeight: activeTab === 'recettes' ? 600 : 400,
+            }}
+          >
+            📋 Mes recettes
+          </button>
+
+          {/* Base CIQUAL */}
+          <button
+            onClick={() => handleTabChange('ciqual')}
+            style={{
+              ...tabStyle,
+              background: activeTab === 'ciqual' ? 'white' : 'transparent',
+              borderBottom: activeTab === 'ciqual' ? '3px solid #0891b2' : '3px solid transparent',
+              color: activeTab === 'ciqual' ? '#0891b2' : '#555',
+              fontWeight: activeTab === 'ciqual' ? 600 : 400,
+            }}
+          >
+            🔬 Base CIQUAL
+          </button>
         </div>
       </nav>
 
       {/* Contenu */}
       <main>
-        <RecipeForm key={activeTab} type={activeTab} />
+        {activeTab === 'recettes' && (
+          <RecipeList onEdit={handleEditRecipe} />
+        )}
+        {activeTab === 'ciqual' && (
+          <CiqualBrowser />
+        )}
+        {(activeTab === 'general' || activeTab === 'viande' || activeTab === 'boissons') && (
+          <RecipeForm
+            key={recipeFormKey}
+            type={activeTab}
+            initialRecipe={editingRecipe ?? undefined}
+            onBack={editingRecipe ? handleBackToList : undefined}
+          />
+        )}
       </main>
     </div>
   )
@@ -84,9 +156,9 @@ const navStyle: React.CSSProperties = {
 }
 
 const tabStyle: React.CSSProperties = {
-  padding: '14px 20px',
+  padding: '14px 18px',
   border: 'none',
   cursor: 'pointer',
-  fontSize: '0.9rem',
+  fontSize: '0.875rem',
   transition: 'all 0.15s',
 }

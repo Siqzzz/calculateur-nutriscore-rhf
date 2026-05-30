@@ -12,6 +12,8 @@ import {
 
 interface Props {
   type: RecipeType
+  initialRecipe?: Recipe
+  onBack?: () => void
 }
 
 interface EditState {
@@ -32,9 +34,9 @@ const VIANDE_ROUGE_INFO = {
   exemples: ['Bœuf', 'Porc', 'Agneau', 'Gibier et venaison', 'Cheval', 'Autruche'],
 }
 
-export function RecipeForm({ type }: Props) {
+export function RecipeForm({ type, initialRecipe, onBack }: Props) {
   const [nom, setNom] = useState('')
-  const [recipe, setRecipe] = useState<Recipe | null>(null)
+  const [recipe, setRecipe] = useState<Recipe | null>(initialRecipe ?? null)
   const [nutriResult, setNutriResult] = useState<NutriScoreResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -152,7 +154,14 @@ export function RecipeForm({ type }: Props) {
 
   return (
     <div style={pageStyle}>
-      <h2 style={{ marginBottom: 16 }}>{TYPE_LABELS[type]}</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        {onBack && (
+          <button onClick={onBack} style={btnBackStyle} title="Retour à mes recettes">
+            ← Mes recettes
+          </button>
+        )}
+        <h2 style={{ margin: 0 }}>{TYPE_LABELS[type]}</h2>
+      </div>
 
       {/* Encadré info viande rouge */}
       <div style={viandeInfoBoxStyle}>
@@ -421,3 +430,4 @@ const cuitBadge: React.CSSProperties = { marginLeft: 6, padding: '1px 6px', back
 const viandeInfoBoxStyle: React.CSSProperties = { background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, marginBottom: 16, overflow: 'hidden' }
 const viandeInfoToggleStyle: React.CSSProperties = { width: '100%', background: 'none', border: 'none', padding: '12px 16px', textAlign: 'left', cursor: 'pointer', fontSize: '0.9rem', color: '#9a3412', display: 'flex', alignItems: 'center' }
 const viandeInfoBodyStyle: React.CSSProperties = { padding: '0 16px 16px', fontSize: '0.875rem', color: '#7c2d12', borderTop: '1px solid #fed7aa' }
+const btnBackStyle: React.CSSProperties = { padding: '6px 14px', background: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: 6, cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500 }

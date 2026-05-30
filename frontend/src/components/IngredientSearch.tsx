@@ -78,7 +78,7 @@ export function IngredientSearch({ onSelect, placeholder = 'Rechercher un ingré
               style={itemStyle}
               onMouseEnter={e => (e.currentTarget.style.background = '#f0f7ff')}
               onMouseLeave={e => (e.currentTarget.style.background = 'white')}
-              onMouseDown={() => handleSelect(ing)}
+              onMouseDown={e => { e.preventDefault(); handleSelect(ing) }}
             >
               <span style={{ fontWeight: 500 }}>{ing.nom}</span>
               {ing.groupeNom && (

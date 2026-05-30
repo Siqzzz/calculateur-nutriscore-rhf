@@ -6,12 +6,33 @@ interface Props {
   nutrition: Nutrition100g | null
 }
 
-const GRADE_COLORS: Record<NutriGrade, { bg: string; text: string }> = {
-  A: { bg: '#038141', text: 'white' },
-  B: { bg: '#85BB2F', text: 'white' },
-  C: { bg: '#FECB02', text: '#333' },
-  D: { bg: '#EE8100', text: 'white' },
-  E: { bg: '#E63312', text: 'white' },
+const GRADES: NutriGrade[] = ['A', 'B', 'C', 'D', 'E']
+
+const GRADE_COLORS: Record<NutriGrade, string> = {
+  A: '#038141',
+  B: '#85BB2F',
+  C: '#FECB02',
+  D: '#EE8100',
+  E: '#E63312',
+}
+
+// Échelle des scores : min = -15, max = 40  (total = 55 unités)
+// Bornes de chaque grade (borne haute exclusive sauf E)
+const SCALE_MIN = -15
+const SCALE_MAX = 40
+const SCALE_RANGE = SCALE_MAX - SCALE_MIN
+
+const GRADE_BOUNDS: Record<NutriGrade, [number, number]> = {
+  A: [-15,  1],   // < 1
+  B: [  1,  3],   // 1–2
+  C: [  3, 11],   // 3–10
+  D: [ 11, 19],   // 11–18
+  E: [ 19, 40],   // ≥ 19
+}
+
+function scoreToPercent(score: number): number {
+  const clamped = Math.max(SCALE_MIN, Math.min(SCALE_MAX, score))
+  return ((clamped - SCALE_MIN) / SCALE_RANGE) * 100
 }
 
 export function NutriScoreDisplay({ grade, score, nutrition }: Props) {
@@ -23,20 +44,20 @@ export function NutriScoreDisplay({ grade, score, nutrition }: Props) {
     )
   }
 
-  const colors = GRADE_COLORS[grade]
+  const needlePos = score !== null ? scoreToPercent(score) : null
 
   return (
     <div style={containerStyle}>
+      {/* Badges A–E */}
       <div style={badgeRowStyle}>
-        {(['A', 'B', 'C', 'D', 'E'] as NutriGrade[]).map(g => {
-          const c = GRADE_COLORS[g]
+        {GRADES.map(g => {
           const isActive = g === grade
           return (
             <div
               key={g}
               style={{
-                background: c.bg,
-                color: c.text,
+                background: GRADE_COLORS[g],
+                color: g === 'C' ? '#333' : 'white',
                 width: isActive ? 56 : 40,
                 height: isActive ? 56 : 40,
                 borderRadius: '50%',
@@ -45,10 +66,10 @@ export function NutriScoreDisplay({ grade, score, nutrition }: Props) {
                 justifyContent: 'center',
                 fontWeight: 700,
                 fontSize: isActive ? '1.5rem' : '1rem',
-                border: isActive ? `3px solid ${colors.bg}` : 'none',
-                boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.25)' : 'none',
+                boxShadow: isActive ? '0 2px 10px rgba(0,0,0,0.3)' : 'none',
                 transition: 'all 0.2s',
-                opacity: isActive ? 1 : 0.4,
+                opacity: isActive ? 1 : 0.35,
+                flexShrink: 0,
               }}
             >
               {g}
@@ -57,10 +78,83 @@ export function NutriScoreDisplay({ grade, score, nutrition }: Props) {
         })}
       </div>
 
-      <p style={{ color: '#555', fontSize: '0.85rem', marginTop: 6 }}>
-        Score : <strong>{score}</strong>
-      </p>
+      {/* Barre colorée avec indicateur */}
+      <div style={{ marginTop: 16, marginBottom: 8 }}>
+        <div style={{ position: 'relative' }}>
+          {/* Barre segmentée */}
+          <div style={{ display: 'flex', height: 16, borderRadius: 8, overflow: 'hidden' }}>
+            {GRADES.map(g => {
+              const [lo, hi] = GRADE_BOUNDS[g]
+              const width = ((hi - lo) / SCALE_RANGE) * 100
+              return (
+                <div
+                  key={g}
+                  style={{
+                    background: GRADE_COLORS[g],
+                    width: `${width}%`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.6rem',
+                    color: g === 'C' ? '#555' : 'rgba(255,255,255,0.8)',
+                    fontWeight: 700,
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  {g}
+                </div>
+              )
+            })}
+          </div>
 
+          {/* Indicateur (triangle + ligne) */}
+          {needlePos !== null && (
+            <div
+              style={{
+                position: 'absolute',
+                left: `${needlePos}%`,
+                top: -10,
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                pointerEvents: 'none',
+              }}
+            >
+              {/* Score */}
+              <span style={{
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                color: GRADE_COLORS[grade],
+                marginBottom: 1,
+                whiteSpace: 'nowrap',
+              }}>
+                {score}
+              </span>
+              {/* Triangle */}
+              <div style={{
+                width: 0,
+                height: 0,
+                borderLeft: '5px solid transparent',
+                borderRight: '5px solid transparent',
+                borderTop: `6px solid ${GRADE_COLORS[grade]}`,
+              }} />
+            </div>
+          )}
+        </div>
+
+        {/* Légende des bornes */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: '0.65rem', color: '#999' }}>
+          <span>{SCALE_MIN}</span>
+          <span>0</span>
+          <span>3</span>
+          <span>11</span>
+          <span>19</span>
+          <span>{SCALE_MAX}</span>
+        </div>
+      </div>
+
+      {/* Tableau valeurs nutritionnelles */}
       {nutrition && (
         <table style={tableStyle}>
           <thead>
@@ -118,7 +212,7 @@ const badgeRowStyle: React.CSSProperties = {
   alignItems: 'center',
   gap: 8,
   justifyContent: 'center',
-  marginBottom: 12,
+  marginBottom: 4,
 }
 
 const tableStyle: React.CSSProperties = {

@@ -64,6 +64,19 @@ export const addIngredient = (recipeId: number, payload: AddIngredientPayload) =
 export const removeIngredient = (recipeId: number, riId: number) =>
   request<Recipe>(`/recipes/${recipeId}/ingredients/${riId}`, { method: 'DELETE' })
 
+export interface UpdateIngredientPayload {
+  poidsInitial?: number
+  estCuit?: boolean
+  methodeFriture?: MethodeFriture
+  partComestibleOverride?: number | null
+}
+
+export const updateIngredient = (recipeId: number, riId: number, payload: UpdateIngredientPayload) =>
+  request<Recipe>(`/recipes/${recipeId}/ingredients/${riId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+
 // Calcul Nutri-Score
 export const calculateNutriScore = (recipeId: number) =>
   request<NutriScoreResult>(`/recipes/${recipeId}/calculate`, { method: 'POST' })

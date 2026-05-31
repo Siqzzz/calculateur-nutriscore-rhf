@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { RecipeForm } from './pages/RecipeForm'
 import { RecipeList } from './pages/RecipeList'
 import { CiqualBrowser } from './pages/CiqualBrowser'
+import { IngredientManager } from './pages/IngredientManager'
 import type { Recipe, RecipeType } from './types'
 
-type TabKey = RecipeType | 'recettes' | 'ciqual'
+type TabKey = RecipeType | 'recettes' | 'ingredients' | 'ciqual'
 
 const RECIPE_TABS: { key: RecipeType; label: string }[] = [
   { key: 'general',  label: '🍽 Général' },
@@ -13,7 +14,7 @@ const RECIPE_TABS: { key: RecipeType; label: string }[] = [
 ]
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabKey>('recettes')
+  const [activeTab, setActiveTab] = useState<TabKey>('general')
   // Recette en cours d'édition (depuis la liste)
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
 
@@ -92,6 +93,20 @@ export default function App() {
             📋 Mes recettes
           </button>
 
+          {/* Mes ingrédients */}
+          <button
+            onClick={() => handleTabChange('ingredients')}
+            style={{
+              ...tabStyle,
+              background: activeTab === 'ingredients' ? 'white' : 'transparent',
+              borderBottom: activeTab === 'ingredients' ? '3px solid #d97706' : '3px solid transparent',
+              color: activeTab === 'ingredients' ? '#d97706' : '#555',
+              fontWeight: activeTab === 'ingredients' ? 600 : 400,
+            }}
+          >
+            🧪 Mes ingrédients
+          </button>
+
           {/* Base CIQUAL */}
           <button
             onClick={() => handleTabChange('ciqual')}
@@ -112,6 +127,9 @@ export default function App() {
       <main>
         {activeTab === 'recettes' && (
           <RecipeList onEdit={handleEditRecipe} />
+        )}
+        {activeTab === 'ingredients' && (
+          <IngredientManager />
         )}
         {activeTab === 'ciqual' && (
           <CiqualBrowser />

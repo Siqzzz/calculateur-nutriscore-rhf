@@ -20,6 +20,7 @@ export interface Ingredient {
   estViandeRouge: boolean
   pctViandeRouge: number | null
   presenceEdulorant: boolean
+  estPersonnalise: boolean
 }
 
 export type RecipeType = 'general' | 'viande' | 'boissons'

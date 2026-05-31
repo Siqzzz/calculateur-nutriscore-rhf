@@ -37,4 +37,14 @@ class IngredientRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    /** @return Ingredient[] */
+    public function findAllCustom(): array
+    {
+        return $this->createQueryBuilder('i')
+            ->where('i.estPersonnalise = true')
+            ->orderBy('i.nom', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
 }

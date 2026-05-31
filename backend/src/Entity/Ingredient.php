@@ -84,6 +84,10 @@ class Ingredient
     #[ORM\Column]
     private bool $presenceEdulorant = false;
 
+    // Ingrédient créé par l'utilisateur (non CIQUAL)
+    #[ORM\Column]
+    private bool $estPersonnalise = false;
+
     public function getId(): ?int { return $this->id; }
 
     public function getNom(): string { return $this->nom; }
@@ -149,6 +153,9 @@ class Ingredient
     public function isPresenceEdulorant(): bool { return $this->presenceEdulorant; }
     public function setPresenceEdulorant(bool $v): static { $this->presenceEdulorant = $v; return $this; }
 
+    public function isEstPersonnalise(): bool { return $this->estPersonnalise; }
+    public function setEstPersonnalise(bool $v): static { $this->estPersonnalise = $v; return $this; }
+
     public function toArray(): array
     {
         return [
@@ -174,6 +181,7 @@ class Ingredient
             'estViandeRouge' => $this->estViandeRouge,
             'pctViandeRouge' => $this->pctViandeRouge,
             'presenceEdulorant' => $this->presenceEdulorant,
+            'estPersonnalise' => $this->estPersonnalise,
         ];
     }
 }

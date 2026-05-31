@@ -80,3 +80,34 @@ export const updateIngredient = (recipeId: number, riId: number, payload: Update
 // Calcul Nutri-Score
 export const calculateNutriScore = (recipeId: number) =>
   request<NutriScoreResult>(`/recipes/${recipeId}/calculate`, { method: 'POST' })
+
+// Ingrédients personnalisés
+export interface CustomIngredientPayload {
+  nom: string
+  energieKj?: number | null
+  lipides?: number | null
+  acideGrasSatures?: number | null
+  glucides?: number | null
+  sucres?: number | null
+  fibres?: number | null
+  proteines?: number | null
+  sel?: number | null
+  fruitsLegumesPct?: number | null
+  partComestible?: number | null
+  rendementCuisson?: number | null
+  estViandeRouge?: boolean
+  pctViandeRouge?: number | null
+  presenceEdulorant?: boolean
+}
+
+export const listCustomIngredients = () =>
+  request<IngredientSearchResult>('/ingredients?type=custom&limit=1000')
+
+export const createCustomIngredient = (payload: CustomIngredientPayload) =>
+  request<Ingredient>('/ingredients', { method: 'POST', body: JSON.stringify(payload) })
+
+export const updateCustomIngredient = (id: number, payload: Partial<CustomIngredientPayload>) =>
+  request<Ingredient>(`/ingredients/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+
+export const deleteCustomIngredient = (id: number) =>
+  request<null>(`/ingredients/${id}`, { method: 'DELETE' })

@@ -21,13 +21,12 @@ class IngredientController extends AbstractController
     #[Route('', name: 'list', methods: ['GET'])]
     public function list(Request $request): JsonResponse
     {
-        $search       = trim($request->query->getString('search', ''));
-        $page         = max(1, $request->query->getInt('page', 1));
-        $limit        = min(50, max(1, $request->query->getInt('limit', 20)));
-        $offset       = ($page - 1) * $limit;
-        $personnalise = $request->query->getBoolean('personnalise', false);
+        $page   = max(1, $request->query->getInt('page', 1));
+        $limit  = min(100, max(1, $request->query->getInt('limit', 20)));
+        $offset = ($page - 1) * $limit;
 
-        if ($personnalise) {
+        // Mode ingrédients personnalisés
+        if ($request->query->getBoolean('personnalise', false)) {
             $items = $this->repo->findAllPersonnalises();
             return $this->json([
                 'data'  => array_map(fn($i) => $i->toArray(), $items),
@@ -36,6 +35,20 @@ class IngredientController extends AbstractController
                 'limit' => count($items),
             ]);
         }
+
+        // Mode navigation : retourner tous les ingrédients paginés sans filtre
+        if ($request->query->getBoolean('browse', false)) {
+            $items = $this->repo->findAllPaginated($limit, $offset);
+            $total = $this->repo->countAll();
+            return $this->json([
+                'data'  => array_map(fn($i) => $i->toArray(), $items),
+                'total' => $total,
+                'page'  => $page,
+                'limit' => $limit,
+            ]);
+        }
+
+        $search = trim($request->query->getString('search', ''));
 
         if (strlen($search) < 2) {
             return $this->json(['data' => [], 'total' => 0, 'page' => $page, 'limit' => $limit]);
@@ -62,6 +75,8 @@ class IngredientController extends AbstractController
         return $this->json($ingredient->toArray());
     }
 
+    // ─── CRUD ingrédients personnalisés ─────────────────────────────────────
+
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(Request $request): JsonResponse
     {
@@ -77,26 +92,40 @@ class IngredientController extends AbstractController
 
         $ing = new Ingredient();
         $ing->setNom($nom);
-        $ing->setIsPersonnalise(true);
-        $ing->setGroupeNom($data['groupeNom'] ?? null);
-        $ing->setEnergieKj(isset($data['energieKj']) ? (float) $data['energieKj'] : null);
-        $ing->setEnergieKcal(isset($data['energieKcal']) ? (float) $data['energieKcal'] : null);
-        $ing->setProteines(isset($data['proteines']) ? (float) $data['proteines'] : null);
-        $ing->setGlucides(isset($data['glucides']) ? (float) $data['glucides'] : null);
-        $ing->setLipides(isset($data['lipides']) ? (float) $data['lipides'] : null);
-        $ing->setSucres(isset($data['sucres']) ? (float) $data['sucres'] : null);
-        $ing->setFibres(isset($data['fibres']) ? (float) $data['fibres'] : null);
-        $ing->setAcideGrasSatures(isset($data['acideGrasSatures']) ? (float) $data['acideGrasSatures'] : null);
-        $ing->setSel(isset($data['sel']) ? (float) $data['sel'] : null);
-        $ing->setFruitsLegumesPct(isset($data['fruitsLegumesPct']) ? (float) $data['fruitsLegumesPct'] : null);
-        $ing->setEstViandeRouge((bool) ($data['estViandeRouge'] ?? false));
-        $ing->setPctViandeRouge(isset($data['pctViandeRouge']) ? (float) $data['pctViandeRouge'] : null);
-        $ing->setPresenceEdulorant((bool) ($data['presenceEdulorant'] ?? false));
+        $ing->setEstPersonnalise(true);
+        $this->hydrate($ing, $data);
 
         $this->em->persist($ing);
         $this->em->flush();
 
         return $this->json($ing->toArray(), 201);
+    }
+
+    #[Route('/{id}', name: 'update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
+    public function update(int $id, Request $request): JsonResponse
+    {
+        $ing = $this->repo->find($id);
+        if (!$ing) {
+            return $this->json(['error' => 'Ingrédient introuvable'], 404);
+        }
+        if (!$ing->isEstPersonnalise()) {
+            return $this->json(['error' => 'Seuls les ingrédients personnalisés peuvent être modifiés.'], 403);
+        }
+
+        $data = json_decode($request->getContent(), true) ?? [];
+        if (!empty($data['nom'])) {
+            $nom = trim($data['nom']);
+            $existing = $this->repo->findOneBy(['nom' => $nom]);
+            if ($existing && $existing->getId() !== $id) {
+                return $this->json(['error' => 'Un ingrédient avec ce nom existe déjà.'], 422);
+            }
+            $ing->setNom($nom);
+        }
+        $this->hydrate($ing, $data);
+
+        $this->em->flush();
+
+        return $this->json($ing->toArray());
     }
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
@@ -106,7 +135,7 @@ class IngredientController extends AbstractController
         if (!$ingredient) {
             return $this->json(['error' => 'Ingrédient introuvable'], 404);
         }
-        if (!$ingredient->isPersonnalise()) {
+        if (!$ingredient->isEstPersonnalise()) {
             return $this->json(['error' => 'Seuls les ingrédients personnalisés peuvent être supprimés.'], 403);
         }
 
@@ -114,5 +143,27 @@ class IngredientController extends AbstractController
         $this->em->flush();
 
         return $this->json(null, 204);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+
+    private function hydrate(Ingredient $ing, array $data): void
+    {
+        $f = static fn($v): ?float => ($v !== null && $v !== '') ? (float) $v : null;
+
+        if (isset($data['groupeNom']))             $ing->setGroupeNom($data['groupeNom'] ?: null);
+        if (array_key_exists('energieKj', $data))         $ing->setEnergieKj($f($data['energieKj']));
+        if (array_key_exists('energieKcal', $data))       $ing->setEnergieKcal($f($data['energieKcal']));
+        if (array_key_exists('lipides', $data))            $ing->setLipides($f($data['lipides']));
+        if (array_key_exists('acideGrasSatures', $data))   $ing->setAcideGrasSatures($f($data['acideGrasSatures']));
+        if (array_key_exists('glucides', $data))           $ing->setGlucides($f($data['glucides']));
+        if (array_key_exists('sucres', $data))             $ing->setSucres($f($data['sucres']));
+        if (array_key_exists('fibres', $data))             $ing->setFibres($f($data['fibres']));
+        if (array_key_exists('proteines', $data))          $ing->setProteines($f($data['proteines']));
+        if (array_key_exists('sel', $data))                $ing->setSel($f($data['sel']));
+        if (array_key_exists('fruitsLegumesPct', $data))   $ing->setFruitsLegumesPct($f($data['fruitsLegumesPct']));
+        if (array_key_exists('estViandeRouge', $data))     $ing->setEstViandeRouge((bool) $data['estViandeRouge']);
+        if (array_key_exists('pctViandeRouge', $data))     $ing->setPctViandeRouge($f($data['pctViandeRouge']));
+        if (array_key_exists('presenceEdulorant', $data))  $ing->setPresenceEdulorant((bool) $data['presenceEdulorant']);
     }
 }

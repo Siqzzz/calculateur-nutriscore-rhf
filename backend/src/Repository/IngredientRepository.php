@@ -41,9 +41,27 @@ class IngredientRepository extends ServiceEntityRepository
     public function findAllPersonnalises(): array
     {
         return $this->createQueryBuilder('i')
-            ->where('i.isPersonnalise = true')
+            ->where('i.estPersonnalise = true')
             ->orderBy('i.nom', 'ASC')
             ->getQuery()
             ->getResult();
+    }
+
+    public function findAllPaginated(int $limit, int $offset): array
+    {
+        return $this->createQueryBuilder('i')
+            ->orderBy('i.nom', 'ASC')
+            ->setMaxResults($limit)
+            ->setFirstResult($offset)
+            ->getQuery()
+            ->getResult();
+    }
+
+    public function countAll(): int
+    {
+        return (int) $this->createQueryBuilder('i')
+            ->select('COUNT(i.id)')
+            ->getQuery()
+            ->getSingleScalarResult();
     }
 }

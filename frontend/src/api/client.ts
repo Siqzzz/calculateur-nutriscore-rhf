@@ -6,6 +6,7 @@ import type {
   NutriScoreResult,
   Recipe,
   RecipeType,
+  UpdateIngredientPayload,
 } from '../types'
 
 const BASE = '/api'
@@ -27,6 +28,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const searchIngredients = (search: string, page = 1, limit = 20) =>
   request<IngredientSearchResult>(`/ingredients?search=${encodeURIComponent(search)}&page=${page}&limit=${limit}`)
 
+export const browseIngredients = (page = 1, limit = 50) =>
+  request<IngredientSearchResult>(`/ingredients?browse=1&page=${page}&limit=${limit}`)
+
 export const getIngredient = (id: number) =>
   request<Ingredient>(`/ingredients/${id}`)
 
@@ -36,6 +40,9 @@ export const listCustomIngredients = () =>
 
 export const createCustomIngredient = (payload: CreateIngredientPayload) =>
   request<Ingredient>('/ingredients', { method: 'POST', body: JSON.stringify(payload) })
+
+export const updateCustomIngredient = (id: number, payload: UpdateIngredientPayload) =>
+  request<Ingredient>(`/ingredients/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
 
 export const deleteCustomIngredient = (id: number) =>
   request<null>(`/ingredients/${id}`, { method: 'DELETE' })
@@ -66,9 +73,22 @@ export interface AddIngredientPayload {
   position?: number
 }
 
+export interface UpdateRecipeIngredientPayload {
+  poidsInitial?: number
+  estCuit?: boolean
+  methodeFriture?: MethodeFriture
+  partComestibleOverride?: number | null
+}
+
 export const addIngredient = (recipeId: number, payload: AddIngredientPayload) =>
   request<Recipe>(`/recipes/${recipeId}/ingredients`, {
     method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const updateIngredient = (recipeId: number, riId: number, payload: UpdateRecipeIngredientPayload) =>
+  request<Recipe>(`/recipes/${recipeId}/ingredients/${riId}`, {
+    method: 'PATCH',
     body: JSON.stringify(payload),
   })
 

@@ -20,7 +20,7 @@ export interface Ingredient {
   estViandeRouge: boolean
   pctViandeRouge: number | null
   presenceEdulorant: boolean
-  isPersonnalise: boolean
+  estPersonnalise: boolean
 }
 
 export type RecipeType = 'general' | 'viande' | 'boissons'
@@ -80,17 +80,19 @@ export interface NutriScoreResult {
 export interface CreateIngredientPayload {
   nom: string
   groupeNom?: string
-  energieKj?: number
-  energieKcal?: number
-  proteines?: number
-  glucides?: number
-  lipides?: number
-  sucres?: number
-  fibres?: number
-  acideGrasSatures?: number
-  sel?: number
-  fruitsLegumesPct?: number
+  energieKj?: number | string
+  energieKcal?: number | string
+  lipides?: number | string
+  acideGrasSatures?: number | string
+  glucides?: number | string
+  sucres?: number | string
+  fibres?: number | string
+  proteines?: number | string
+  sel?: number | string
+  fruitsLegumesPct?: number | string
   estViandeRouge?: boolean
-  pctViandeRouge?: number
+  pctViandeRouge?: number | string
   presenceEdulorant?: boolean
 }
+
+export type UpdateIngredientPayload = Partial<CreateIngredientPayload>

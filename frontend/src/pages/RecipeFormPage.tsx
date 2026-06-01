@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import type { Ingredient, MethodeFriture, NutriGrade, NutriScoreResult, Recipe, RecipeType } from '../types'
+import type { Ingredient, MethodeFriture, NutriGrade, NutriScoreResult, Recipe, RecipeIngredient, RecipeType } from '../types'
 import { IngredientSearch } from '../components/IngredientSearch'
 import { NutriScoreDisplay } from '../components/NutriScoreDisplay'
-import { addIngredient, calculateNutriScore, createRecipe, getRecipe, removeIngredient } from '../api/client'
+import { addIngredient, calculateNutriScore, createRecipe, getRecipe, removeIngredient, updateIngredient } from '../api/client'
 
 const TYPE_CONFIG: Record<RecipeType, { label: string; icon: string; desc: string }> = {
   general:  { label: 'Général',  icon: '🍽',  desc: 'Plats composés, entrées, desserts…' },
@@ -37,6 +37,12 @@ export default function RecipeFormPage() {
   const [poids, setPoids] = useState('')
   const [estCuit, setEstCuit] = useState(false)
   const [methodeFriture, setMethodeFriture] = useState<MethodeFriture>('non')
+
+  // Inline editing state
+  const [editingRiId, setEditingRiId] = useState<number | null>(null)
+  const [editPoids, setEditPoids] = useState('')
+  const [editEstCuit, setEditEstCuit] = useState(false)
+  const [editFriture, setEditFriture] = useState<MethodeFriture>('non')
 
   useEffect(() => {
     if (id) {
@@ -92,6 +98,38 @@ export default function RecipeFormPage() {
     try {
       setRecipe(await removeIngredient(recipe.id, riId))
       setNutriResult(null)
+      if (editingRiId === riId) setEditingRiId(null)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Erreur')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const startEdit = (ri: RecipeIngredient) => {
+    setEditingRiId(ri.id)
+    setEditPoids(String(ri.poidsInitial))
+    setEditEstCuit(ri.estCuit)
+    setEditFriture(ri.methodeFriture)
+  }
+
+  const cancelEdit = () => setEditingRiId(null)
+
+  const saveEdit = async (riId: number) => {
+    if (!recipe) return
+    const p = parseFloat(editPoids)
+    if (isNaN(p) || p <= 0) return setError('Poids invalide.')
+    setError(null)
+    setLoading(true)
+    try {
+      const updated = await updateIngredient(recipe.id, riId, {
+        poidsInitial: p,
+        estCuit: editEstCuit,
+        methodeFriture: editFriture,
+      })
+      setRecipe(updated)
+      setNutriResult(null)
+      setEditingRiId(null)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erreur')
     } finally {
@@ -118,6 +156,8 @@ export default function RecipeFormPage() {
     return <div className="text-center py-16 text-slate-400">Chargement…</div>
   }
 
+  const displayGrade = (nutriResult?.grade ?? recipe?.gradeNutri) as NutriGrade | null
+
   return (
     <div>
       <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-6 transition-colors">
@@ -142,7 +182,6 @@ export default function RecipeFormPage() {
           <h1 className="text-2xl font-bold text-slate-900 mb-1">Nouvelle recette</h1>
           <p className="text-slate-500 text-sm mb-8">Choisissez le type et donnez un nom à votre recette.</p>
 
-          {/* Type selector */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-slate-700 mb-3">Type de recette</label>
             <div className="grid grid-cols-3 gap-3">
@@ -164,7 +203,6 @@ export default function RecipeFormPage() {
             </div>
           </div>
 
-          {/* Nom */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-slate-700 mb-2">Nom de la recette</label>
             <input
@@ -200,9 +238,9 @@ export default function RecipeFormPage() {
                   {TYPE_CONFIG[type].label}
                 </span>
               </div>
-              {recipe.gradeNutri && (
-                <span className={`ml-2 w-9 h-9 rounded-full text-white font-bold text-base flex items-center justify-center ${GRADE_BG[recipe.gradeNutri]}`}>
-                  {recipe.gradeNutri}
+              {displayGrade && (
+                <span className={`ml-2 w-9 h-9 rounded-full text-white font-bold text-base flex items-center justify-center ${GRADE_BG[displayGrade]}`}>
+                  {displayGrade}
                 </span>
               )}
             </div>
@@ -214,6 +252,14 @@ export default function RecipeFormPage() {
               {loading ? 'Calcul…' : '🧮 Calculer le Nutri-Score'}
             </button>
           </div>
+
+          {/* Info box viande rouge (viande type only) */}
+          {type === 'viande' && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 mb-6 flex items-start gap-2">
+              <span className="text-base">🥩</span>
+              <span>Pour les recettes <strong>viande</strong>, le % de viande rouge de chaque ingrédient est pris en compte dans le calcul du Nutri-Score. Vérifiez que les ingrédients carnés ont bien leur % renseigné.</span>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 items-start">
             {/* Colonne gauche */}
@@ -301,33 +347,87 @@ export default function RecipeFormPage() {
                 ) : (
                   <div className="divide-y divide-slate-100">
                     {recipe.ingredients.map(ri => (
-                      <div key={ri.id} className="flex items-center gap-3 py-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800 truncate">{ri.ingredient.nom}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            {ri.estCuit && (
-                              <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">cuit</span>
+                      <div key={ri.id} className="py-3">
+                        {editingRiId === ri.id ? (
+                          /* Inline edit row */
+                          <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+                            <p className="text-sm font-medium text-slate-800">{ri.ingredient.nom}</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-xs text-slate-500 mb-1">Poids (g)</label>
+                                <input
+                                  type="number" min="0" step="0.1"
+                                  value={editPoids}
+                                  onChange={e => setEditPoids(e.target.value)}
+                                  className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+                              <div className="flex items-end gap-2 pb-1">
+                                <input type="checkbox" id={`cuit-${ri.id}`} checked={editEstCuit}
+                                  onChange={e => setEditEstCuit(e.target.checked)}
+                                  className="w-4 h-4 accent-blue-600" />
+                                <label htmlFor={`cuit-${ri.id}`} className="text-sm text-slate-700 cursor-pointer">Cuit</label>
+                              </div>
+                            </div>
+                            {editEstCuit && (
+                              <select value={editFriture} onChange={e => setEditFriture(e.target.value as MethodeFriture)}
+                                className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                {(Object.entries(FRITURE_LABELS) as [MethodeFriture, string][]).map(([val, label]) => (
+                                  <option key={val} value={val}>{label}</option>
+                                ))}
+                              </select>
                             )}
-                            {type === 'viande' && ri.ingredient.pctViandeRouge != null && (
-                              <span className="text-xs text-slate-500">{ri.ingredient.pctViandeRouge}% V.rouge</span>
-                            )}
-                            {type === 'boissons' && (
-                              <span className="text-xs text-slate-500">
-                                Édulcorant: {ri.ingredient.presenceEdulorant ? 'OUI' : 'NON'}
-                              </span>
-                            )}
+                            <div className="flex gap-2 pt-1">
+                              <button onClick={() => saveEdit(ri.id)} disabled={loading}
+                                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg py-1.5 transition-colors">
+                                ✓ Valider
+                              </button>
+                              <button onClick={cancelEdit}
+                                className="flex-1 border border-slate-300 text-slate-600 text-xs font-medium rounded-lg py-1.5 hover:bg-slate-100 transition-colors">
+                                Annuler
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                        <span className="text-sm font-mono text-slate-600 shrink-0">{ri.poidsInitial} g</span>
-                        <button
-                          onClick={() => handleRemove(ri.id)}
-                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Supprimer"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+                        ) : (
+                          /* Normal row */
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-800 truncate">{ri.ingredient.nom}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {ri.estCuit && (
+                                  <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">cuit</span>
+                                )}
+                                {type === 'viande' && ri.ingredient.pctViandeRouge != null && (
+                                  <span className="text-xs text-slate-500">{ri.ingredient.pctViandeRouge}% V.rouge</span>
+                                )}
+                                {type === 'boissons' && (
+                                  <span className="text-xs text-slate-500">
+                                    Édulcorant: {ri.ingredient.presenceEdulorant ? 'OUI' : 'NON'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-sm font-mono text-slate-600 shrink-0">{ri.poidsInitial} g</span>
+                            <button
+                              onClick={() => startEdit(ri)}
+                              className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Modifier"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleRemove(ri.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Supprimer"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

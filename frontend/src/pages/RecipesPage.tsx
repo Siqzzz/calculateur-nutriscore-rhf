@@ -9,6 +9,16 @@ const GRADE_BG: Record<string, string> = {
 }
 const GRADE_TEXT: Record<string, string> = { C: 'text-slate-800', default: 'text-white' }
 
+function downloadJson(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function RecipesPage() {
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [loading, setLoading] = useState(true)
@@ -30,6 +40,15 @@ export default function RecipesPage() {
     }
   }
 
+  const handleExportOne = (e: React.MouseEvent, recipe: Recipe) => {
+    e.preventDefault()
+    downloadJson(recipe, `recette-${recipe.nom.replace(/\s+/g, '_')}.json`)
+  }
+
+  const handleExportAll = () => {
+    downloadJson(recipes, 'recettes.json')
+  }
+
   if (loading) return <div className="text-center py-16 text-slate-400">Chargement…</div>
 
   return (
@@ -39,12 +58,23 @@ export default function RecipesPage() {
           <h1 className="text-2xl font-bold text-slate-900 mb-1">Mes recettes</h1>
           <p className="text-slate-500 text-sm">{recipes.length} recette{recipes.length !== 1 ? 's' : ''} sauvegardée{recipes.length !== 1 ? 's' : ''}</p>
         </div>
-        <Link
-          to="/recette"
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl px-4 py-2.5 text-sm transition-colors"
-        >
-          + Nouvelle recette
-        </Link>
+        <div className="flex items-center gap-2">
+          {recipes.length > 0 && (
+            <button
+              onClick={handleExportAll}
+              className="border border-slate-300 hover:border-slate-400 text-slate-600 hover:text-slate-800 font-medium rounded-xl px-4 py-2.5 text-sm transition-colors"
+              title="Exporter toutes les recettes"
+            >
+              ↓ Tout exporter
+            </button>
+          )}
+          <Link
+            to="/recette"
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl px-4 py-2.5 text-sm transition-colors"
+          >
+            + Nouvelle recette
+          </Link>
+        </div>
       </div>
 
       {recipes.length === 0 ? (
@@ -76,6 +106,15 @@ export default function RecipesPage() {
                       {recipe.gradeNutri}
                     </span>
                   )}
+                  <button
+                    onClick={e => handleExportOne(e, recipe)}
+                    className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                    title="Exporter en JSON"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                  </button>
                   <button
                     onClick={e => handleDelete(e, recipe.id)}
                     disabled={deletingId === recipe.id}

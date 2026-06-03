@@ -130,6 +130,32 @@ class RecipeController extends AbstractController
         return $this->json($recipe->toArray(), 201);
     }
 
+    #[Route('/{id}/ingredients/{riId}', name: 'update_ingredient', methods: ['PATCH'], requirements: ['id' => '\d+', 'riId' => '\d+'])]
+    public function updateIngredient(int $id, int $riId, Request $request): JsonResponse
+    {
+        $recipe = $this->recipeRepo->find($id);
+        if (!$recipe) {
+            return $this->json(['error' => 'Recette introuvable'], 404);
+        }
+
+        $data = json_decode($request->getContent(), true) ?? [];
+
+        foreach ($recipe->getRecipeIngredients() as $ri) {
+            if ($ri->getId() === $riId) {
+                if (isset($data['poidsInitial']))          $ri->setPoidsInitial((float) $data['poidsInitial']);
+                if (isset($data['estCuit']))               $ri->setEstCuit((bool) $data['estCuit']);
+                if (isset($data['methodeFriture']))        $ri->setMethodeFriture($data['methodeFriture']);
+                if (array_key_exists('partComestibleOverride', $data)) {
+                    $ri->setPartComestibleOverride($data['partComestibleOverride'] !== null ? (float) $data['partComestibleOverride'] : null);
+                }
+                $this->em->flush();
+                return $this->json($recipe->toArray());
+            }
+        }
+
+        return $this->json(['error' => 'Ingrédient de recette introuvable'], 404);
+    }
+
     #[Route('/{id}/ingredients/{riId}', name: 'remove_ingredient', methods: ['DELETE'], requirements: ['id' => '\d+', 'riId' => '\d+'])]
     public function removeIngredient(int $id, int $riId): JsonResponse
     {

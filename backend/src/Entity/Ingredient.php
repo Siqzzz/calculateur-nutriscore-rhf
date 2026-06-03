@@ -84,8 +84,8 @@ class Ingredient
     #[ORM\Column]
     private bool $presenceEdulorant = false;
 
-    #[ORM\Column]
-    private bool $isPersonnalise = false;
+    #[ORM\Column(name: 'est_personnalise')]
+    private bool $estPersonnalise = false;
 
     public function getId(): ?int { return $this->id; }
 
@@ -152,8 +152,8 @@ class Ingredient
     public function isPresenceEdulorant(): bool { return $this->presenceEdulorant; }
     public function setPresenceEdulorant(bool $v): static { $this->presenceEdulorant = $v; return $this; }
 
-    public function isPersonnalise(): bool { return $this->isPersonnalise; }
-    public function setIsPersonnalise(bool $v): static { $this->isPersonnalise = $v; return $this; }
+    public function isEstPersonnalise(): bool { return $this->estPersonnalise; }
+    public function setEstPersonnalise(bool $v): static { $this->estPersonnalise = $v; return $this; }
 
     public function toArray(): array
     {
@@ -180,7 +180,7 @@ class Ingredient
             'estViandeRouge' => $this->estViandeRouge,
             'pctViandeRouge' => $this->pctViandeRouge,
             'presenceEdulorant' => $this->presenceEdulorant,
-            'isPersonnalise' => $this->isPersonnalise,
+            'estPersonnalise' => $this->estPersonnalise,
         ];
     }
 }

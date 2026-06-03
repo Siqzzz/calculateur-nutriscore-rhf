@@ -48,9 +48,15 @@ class ImportCiqualCommand extends Command
 
         $io->info("Chargement du fichier Excel (peut prendre quelques minutes)...");
 
-        $sheetsToLoad = ['Part comestible-Rendement', 'Feuille calcul CIQ+BDD', 'Base de données'];
+        // "Feuille calcul CIQ+BDD" contient les 11 800+ ingrédients mais certaines cellules
+        // "nom" stockent une formule (='Base de données'!I10) au lieu de la valeur directe.
+        // On pré-charge les valeurs de "Base de données" via streaming XML (coût négligeable :
+        // seulement ~2 lignes dans ce fichier) pour résoudre ces références lors de l'import.
+        $io->section('Pré-chargement des références "Base de données"');
+        $bddLookup = $this->buildBddLookup($fichier, $io);
+
         $reader = IOFactory::createReaderForFile($fichier);
-        $reader->setLoadSheetsOnly($sheetsToLoad);
+        $reader->setLoadSheetsOnly(['Part comestible-Rendement', 'Feuille calcul CIQ+BDD']);
         $reader->setReadDataOnly(true);
         $spreadsheet = $reader->load($fichier);
 
@@ -58,7 +64,7 @@ class ImportCiqualCommand extends Command
         $this->importEdiblePortions($spreadsheet, $io);
 
         $io->section('Import des ingrédients CIQUAL (Feuille calcul CIQ+BDD)');
-        $this->importIngredients($spreadsheet, $io);
+        $this->importIngredients($spreadsheet, $bddLookup, $io);
 
         $io->success('Import terminé avec succès.');
         return Command::SUCCESS;
@@ -116,53 +122,53 @@ class ImportCiqualCommand extends Command
         $io->writeln("<info>$rowCount rendements importés</info>");
     }
 
-    private function importIngredients(\PhpOffice\PhpSpreadsheet\Spreadsheet $spreadsheet, SymfonyStyle $io): void
+    private function importIngredients(\PhpOffice\PhpSpreadsheet\Spreadsheet $spreadsheet, array $bddLookup, SymfonyStyle $io): void
     {
-        $sheetName = 'Feuille calcul CIQ+BDD';
-        $sheet = $spreadsheet->getSheetByName($sheetName);
+        $sheet = $spreadsheet->getSheetByName('Feuille calcul CIQ+BDD');
 
         if (!$sheet) {
-            $io->warning("Feuille \"$sheetName\" introuvable, tentative avec \"Base de données\".");
-            $sheet = $spreadsheet->getSheetByName('Base de données');
-        }
-
-        if (!$sheet) {
-            $io->error('Aucune feuille de données ingrédients trouvée.');
+            $io->error('Feuille "Feuille calcul CIQ+BDD" introuvable.');
             return;
         }
 
-        // Lire la ligne d'en-tête pour trouver les colonnes
+        // Lire la ligne d'en-tête
         $headers = [];
         foreach ($sheet->getRowIterator(1, 1) as $row) {
             $cells = $row->getCellIterator();
             $cells->setIterateOnlyExistingCells(false);
             $col = 0;
             foreach ($cells as $cell) {
-                $headers[$col] = trim((string) ($cell->getValue() ?? ''));
-                $col++;
+                $headers[$col++] = trim((string) ($cell->getValue() ?? ''));
             }
         }
 
         $colMap = $this->buildColumnMap($headers);
         $io->writeln('Colonnes détectées : ' . implode(', ', array_keys($colMap)));
 
-        // Supprimer les anciens ingrédients
+        // Supprimer les recettes et leurs lignes d'abord (FK sur ingredient)
+        $this->em->createQuery('DELETE FROM App\Entity\RecipeIngredient')->execute();
+        $this->em->createQuery('DELETE FROM App\Entity\Recipe')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\Ingredient')->execute();
 
         $progressBar = $io->createProgressBar();
         $progressBar->start();
-        $rowCount = 0;
-        $skipped  = 0;
-        $nomsInseres = []; // pour éviter les doublons
+        $rowCount    = 0;
+        $skipped     = 0;
+        $nomsInseres = [];
 
         foreach ($sheet->getRowIterator(2) as $row) {
             $cells = $row->getCellIterator();
             $cells->setIterateOnlyExistingCells(false);
             $data = [];
-            $col = 0;
+            $col  = 0;
             foreach ($cells as $cell) {
-                $data[$col] = $cell->getValue();
-                $col++;
+                $val = $cell->getValue();
+                // Résoudre les formules de référence croisée ('Base de données'!X99)
+                if (is_string($val) && str_starts_with($val, "='Base de données'!")) {
+                    $ref = strtoupper(substr($val, strlen("='Base de données'!")));
+                    $val = $bddLookup[$ref] ?? null;
+                }
+                $data[$col++] = $val;
             }
 
             $nom = isset($colMap['nom']) ? trim((string) ($data[$colMap['nom']] ?? '')) : null;
@@ -188,17 +194,16 @@ class ImportCiqualCommand extends Command
             $ing->setFibres($this->col($data, $colMap, 'fibres'));
             $ing->setAcideGrasSatures($this->col($data, $colMap, 'ags'));
             $ing->setSodium($this->col($data, $colMap, 'sodium'));
-            // Sel = sodium × 400/1000 si absent de la feuille
+
             $sel = $this->col($data, $colMap, 'sel');
             if ($sel === null) {
                 $sodium = $ing->getSodium();
-                $sel = $sodium !== null ? round($sodium * 0.4 / 100, 4) : null;
+                $sel    = $sodium !== null ? round($sodium * 0.4 / 100, 4) : null;
             }
             $ing->setSel($sel);
             $ing->setFruitsLegumesPct($this->col($data, $colMap, 'fln_pct'));
             $ing->setPartComestible($this->col($data, $colMap, 'part_comestible'));
             $ing->setRendementCuisson($this->col($data, $colMap, 'rendement'));
-
             $ing->setAlimentCuit($this->detecterAlimentCuit($nom));
 
             if (isset($colMap['pct_viande_rouge'])) {
@@ -229,6 +234,118 @@ class ImportCiqualCommand extends Command
         $progressBar->finish();
         $io->newLine(2);
         $io->writeln("<info>$rowCount ingrédients importés ($skipped lignes ignorées)</info>");
+    }
+
+    /**
+     * Construit un lookup ['I10' => 'Eau de recette', ...] depuis la feuille "Base de données"
+     * en parsant le XLSM via ZipArchive + XMLReader (streaming, mémoire minimale).
+     *
+     * @return array<string, string>
+     */
+    private function buildBddLookup(string $fichier, SymfonyStyle $io): array
+    {
+        $zip = new \ZipArchive();
+        if ($zip->open($fichier) !== true) {
+            $io->warning("Impossible d'ouvrir le fichier ZIP pour pré-charger Base de données.");
+            return [];
+        }
+
+        // Charger les chaînes partagées
+        $sharedStrings = [];
+        $ssXml = $zip->getFromName('xl/sharedStrings.xml');
+        if ($ssXml !== false) {
+            $r = new \XMLReader();
+            $r->XML($ssXml);
+            $cur = '';
+            while ($r->read()) {
+                if ($r->nodeType === \XMLReader::ELEMENT && $r->localName === 'si') {
+                    $cur = '';
+                } elseif ($r->nodeType === \XMLReader::ELEMENT && $r->localName === 't') {
+                    $r->read();
+                    if ($r->nodeType === \XMLReader::TEXT) { $cur .= $r->value; }
+                } elseif ($r->nodeType === \XMLReader::END_ELEMENT && $r->localName === 'si') {
+                    $sharedStrings[] = $cur;
+                }
+            }
+            $r->close();
+        }
+        unset($ssXml);
+
+        // Trouver le chemin de la feuille "Base de données" via rels
+        $relsXml   = $zip->getFromName('xl/_rels/workbook.xml.rels');
+        $wbXml     = $zip->getFromName('xl/workbook.xml');
+        $sheetPath = null;
+
+        if ($wbXml && $relsXml) {
+            $dom = new \DOMDocument();
+            @$dom->loadXML($wbXml);
+            $rId = null;
+            foreach ($dom->getElementsByTagName('sheet') as $node) {
+                if ($node->getAttribute('name') === 'Base de données') {
+                    $rId = $node->getAttributeNS(
+                        'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+                        'id'
+                    ) ?: $node->getAttribute('r:id');
+                    break;
+                }
+            }
+            if ($rId) {
+                $dom2 = new \DOMDocument();
+                @$dom2->loadXML($relsXml);
+                foreach ($dom2->getElementsByTagName('Relationship') as $node) {
+                    if ($node->getAttribute('Id') === $rId) {
+                        $target    = $node->getAttribute('Target');
+                        $sheetPath = str_starts_with($target, '/') ? ltrim($target, '/') : 'xl/' . $target;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!$sheetPath) {
+            $zip->close();
+            $io->warning('Feuille "Base de données" introuvable — les formules ne seront pas résolues.');
+            return [];
+        }
+
+        $sheetXml = $zip->getFromName($sheetPath);
+        $zip->close();
+
+        if ($sheetXml === false) {
+            return [];
+        }
+
+        // Parser la feuille et indexer toutes les valeurs par référence cellule (ex. "I10")
+        $lookup    = [];
+        $xmlReader = new \XMLReader();
+        $xmlReader->XML($sheetXml);
+        unset($sheetXml);
+
+        $cellRef  = '';
+        $cellType = '';
+        $inValue  = false;
+
+        while ($xmlReader->read()) {
+            if ($xmlReader->nodeType === \XMLReader::ELEMENT) {
+                if ($xmlReader->localName === 'c') {
+                    $cellRef  = strtoupper($xmlReader->getAttribute('r') ?? '');
+                    $cellType = $xmlReader->getAttribute('t') ?? '';
+                    $inValue  = false;
+                } elseif ($xmlReader->localName === 'v') {
+                    $inValue = true;
+                }
+            } elseif ($xmlReader->nodeType === \XMLReader::TEXT && $inValue && $cellRef !== '') {
+                $raw = $xmlReader->value;
+                $lookup[$cellRef] = $cellType === 's' ? ($sharedStrings[(int) $raw] ?? '') : $raw;
+                $inValue          = false;
+            } elseif ($xmlReader->nodeType === \XMLReader::END_ELEMENT && $xmlReader->localName === 'v') {
+                $inValue = false;
+            }
+        }
+        $xmlReader->close();
+
+        $io->writeln(sprintf('  <info>%d</info> cellules pré-chargées depuis "Base de données".', count($lookup)));
+        return $lookup;
     }
 
     private function buildColumnMap(array $headers): array

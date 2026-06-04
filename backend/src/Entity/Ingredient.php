@@ -84,7 +84,7 @@ class Ingredient
     #[ORM\Column]
     private bool $presenceEdulorant = false;
 
-    #[ORM\Column(name: 'est_personnalise')]
+    #[ORM\Column(name: 'is_personnalise')]
     private bool $estPersonnalise = false;
 
     public function getId(): ?int { return $this->id; }
